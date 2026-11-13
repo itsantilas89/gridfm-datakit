@@ -77,6 +77,8 @@ def main():
                     help="p.u. voltage bounds written to every voltage level (0 0 = keep the file's own limits)")
     ap.add_argument("--controls", action="store_true",
                     help="let transformer taps / shunt sections regulate voltage before saving (slow; did not converge reliably on D-GITT)")
+    ap.add_argument("--limit-scale", type=float, default=1.0,
+                    help="multiply every permanent current limit by this factor (2.0 made the OPF feasible on the 225/380 kV D-GITT grid)")
     ap.add_argument("--relax-overloads", action="store_true",
                     help="raise the permanent current limit of elements still overloaded after the load flow to 110%% of their loading")
     ap.add_argument("--min-kv", type=float, default=0.0,
@@ -183,6 +185,17 @@ def main():
     if a.controls:
         res = pp.loadflow.run_ac(net, lf_violations.lf_parameters(controls=True))[0]
         print(f"load flow with transformer/shunt voltage control: {res.status.name} ({res.iteration_count} iterations)")
+
+    # ---- scale all permanent current limits (the OPF is thermally infeasible with the real ratings
+    # and a synthetic load placement; see diagnose_opf.py)
+    if a.limit_scale != 1.0:
+        lim = net.get_operational_limits()
+        ix = lim.index
+        keep = (ix.get_level_values("type") == "CURRENT") & (ix.get_level_values("acceptable_duration") == -1)
+        keep &= (lim.value < 1e300).to_numpy()
+        sel = lim[keep]
+        net.update_operational_limits(pd.DataFrame({"value": sel.value.to_numpy() * a.limit_scale}, index=sel.index))
+        print(f"permanent current limits x{a.limit_scale} on {len(sel)} limits")
 
     if a.relax_overloads:
         _, v = lf_violations.run(net, verbose=False)
