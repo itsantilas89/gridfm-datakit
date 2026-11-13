@@ -116,6 +116,7 @@ def main():
     if a.only:
         todo = {k: v for k, v in todo.items() if k in a.only.split(",")}
 
+    pending = []
     print(f"\nOPF on {src.name}")
     for name, n in todo.items():
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".m", delete=False) as t:
