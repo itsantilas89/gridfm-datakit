@@ -52,12 +52,21 @@ def variants(net):
         n.Pd = n.Pd * 0.2
         n.Qd = n.Qd * 0.2
 
+    def scale_rates(k):
+        def f(n):
+            n.branches[:, RATE_A] = n.branches[:, RATE_A] * k  # 0 (unlimited) stays 0
+
+        return f
+
     def all_relaxed(n):
         no_thermal(n), wide_v(n), no_shunts(n), wide_q(n)
 
     return {
         "baseline": net,
         "no_thermal_limits": mod(no_thermal),
+        "thermal_limits_x1.5": mod(scale_rates(1.5)),
+        "thermal_limits_x2": mod(scale_rates(2.0)),
+        "thermal_limits_x3": mod(scale_rates(3.0)),
         "wide_voltage_0.7-1.3": mod(wide_v),
         "no_shunts": mod(no_shunts),
         "wide_gen_q_limits": mod(wide_q),
@@ -65,6 +74,30 @@ def variants(net):
         "load_x0.2": mod(light_load),
         "all_four_relaxed": mod(all_relaxed),
     }
+
+
+def report_binding(net, res, top=20):
+    """Branches whose OPF flow exceeds the rating of the ORIGINAL case (use on a relaxed-limits solve)."""
+    import numpy as np
+
+    sol = res["solution"]
+    base = float(sol["baseMVA"]) if "baseMVA" in sol else 100.0
+    rows = []
+    for i in range(net.branches.shape[0]):
+        key = str(i + 1)
+        br = sol["branch"][key] if key in sol["branch"] else None
+        if br is None:
+            continue
+        s_from = base * np.hypot(float(br["pf"]), float(br["qf"]))
+        s_to = base * np.hypot(float(br["pt"]), float(br["qt"]))
+        rate = net.branches[i, RATE_A]
+        flow = max(s_from, s_to)
+        rows.append((i, int(net.branches[i, 0]), int(net.branches[i, 1]), rate, flow))
+    over = [r for r in rows if r[3] > 0 and r[4] > r[3] * 1.0001]
+    print(f"  branches above their original rating in the relaxed solution: {len(over)} of {len(rows)}")
+    print("    row   from    to   rating(MVA)  flow(MVA)  flow/rating")
+    for i, f, t, rate, flow in sorted(over, key=lambda r: -r[4] / r[3])[:top]:
+        print(f"    {i:4d} {f:6d} {t:5d} {rate:11.1f} {flow:10.1f} {flow / rate:10.2f}")
 
 
 def main():
@@ -92,11 +125,19 @@ def main():
             try:
                 res = jl.run_opf(path)
                 status = str(res["termination_status"])
+                if name in ("no_thermal_limits", "all_four_relaxed") and status == "LOCALLY_SOLVED":
+                    pending.append(res)
             except Exception as e:  # noqa: BLE001
                 status = f"error: {e}"
         finally:
             os.unlink(path)
         print(f"  {name:24s} {status}", flush=True)
+        if pending:
+            try:
+                report_binding(net, pending.pop())
+            except Exception as e:  # noqa: BLE001
+                print("  (could not read branch flows:", e, ")")
+            pending.clear()
 
 
 if __name__ == "__main__":
