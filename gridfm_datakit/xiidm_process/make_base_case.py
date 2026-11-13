@@ -32,6 +32,37 @@ import lf_violations
 from grid_paths import BASE_DIR, CONNECTED_DIR, RAW_DIR, extension_of, newest_snapshot
 
 
+def remove_voltage_levels(net, vl_ids):
+    """Remove voltage levels together with every branch that touches them."""
+    vl = set(vl_ids)
+    if not vl:
+        return
+    doomed = []
+    for getter, cols in (
+        (net.get_lines, ("voltage_level1_id", "voltage_level2_id")),
+        (net.get_2_windings_transformers, ("voltage_level1_id", "voltage_level2_id")),
+        (net.get_3_windings_transformers, ("voltage_level1_id", "voltage_level2_id", "voltage_level3_id")),
+        (net.get_dangling_lines, ("voltage_level_id",)),
+        (net.get_hvdc_lines, ("converter_station1_id", "converter_station2_id")),
+    ):
+        df = getter()
+        if len(df) and all(c in df for c in cols):
+            doomed += df.index[df[list(cols)].isin(vl).any(axis=1)].tolist()
+    if doomed:
+        net.remove_elements(doomed)
+    net.remove_elements(sorted(vl))
+
+
+def keep_main_component(net):
+    """Drop everything outside the largest connected component."""
+    b = net.get_buses()
+    comp = b.connected_component
+    main = comp.value_counts().idxmax()
+    vls = set(b.voltage_level_id[comp != main]) - set(b.voltage_level_id[comp == main])
+    remove_voltage_levels(net, vls)
+    return len(vls)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("input", nargs="?", type=Path)
@@ -48,6 +79,8 @@ def main():
                     help="let transformer taps / shunt sections regulate voltage before saving (slow; did not converge reliably on D-GITT)")
     ap.add_argument("--relax-overloads", action="store_true",
                     help="raise the permanent current limit of elements still overloaded after the load flow to 110%% of their loading")
+    ap.add_argument("--min-kv", type=float, default=0.0,
+                    help="keep only voltage levels with nominal_v >= this (kV), e.g. 200 for the 225/380 kV grid")
     ap.add_argument("--seed", type=int, default=0)
     a = ap.parse_args()
 
@@ -56,6 +89,13 @@ def main():
         raise SystemExit("no input given and no snapshot in data_rte/{connected,raw}")
     rng = np.random.default_rng(a.seed)
     net = pp.network.load(str(src))
+
+    if a.min_kv > 0:
+        vls = net.get_voltage_levels(attributes=["nominal_v"])
+        remove_voltage_levels(net, vls.index[vls.nominal_v < a.min_kv])
+        dropped = keep_main_component(net)
+        print(f"kept voltage levels >= {a.min_kv} kV: {len(net.get_voltage_levels())} levels, {len(net.get_buses())} buses "
+              f"({dropped} disconnected levels dropped), {len(net.get_loads())} loads, {len(net.get_generators())} generators")
 
     gens = net.get_generators(attributes=["max_p", "min_p", "voltage_regulator_on", "voltage_level_id", "connected"])
     gens = gens[gens.connected & (gens.max_p > 0)]

@@ -105,8 +105,7 @@ def main(path):
     print(f"  main island: load={bus0[mem,2].sum():.0f} MW  PMAX={pmax[gin].sum():.0f} MW  PG={gen0[gin,1].sum():.0f} MW")
 
     # 6. PowSyBl AC load flow + operating-limit violations
-    print("
-[AC load flow and limit violations]")
+    print("\n[AC load flow and limit violations]")
     try:
         lf_violations.run(net)
     except Exception as e:  # noqa: BLE001

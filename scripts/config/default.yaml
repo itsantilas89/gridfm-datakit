@@ -1,10 +1,10 @@
 network:
-  name: "2023-12-31-2355-base" # Name of the power grid network (without extension)
+  name: "2023-12-31-2355-225kv-base" # Name of the power grid network (without extension)
   reader: "powsybl"
   source: "file" # Data source for the grid; options: pglib, file
   # WARNING: the following parameter is only used if source is "file"
   network_dir: "scripts/grids/data_rte/base"
-  file: "scripts/grids/data_rte/base/2023-12-31-2355-base.xiidm.bz2" # used by the powsybl reader
+  file: "scripts/grids/data_rte/base/2023-12-31-2355-225kv-base.xiidm.bz2" # used by the powsybl reader
 
 load:
   generator: "agg_load_profile" # Name of the load generator; options: agg_load_profile, powergraph
