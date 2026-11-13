@@ -13,7 +13,7 @@ network needs non-zero nominal loads, plus generator setpoints. This script writ
 It is a synthetic operating point, NOT real RTE data.
 
 Usage:
-    python make_base_case.py [IN.xiidm[.bz2]] [OUT.xiidm.bz2] [--load-fraction 0.3] [--seed 0]
+    python make_base_case.py [IN.xiidm[.bz2]] [OUT.xiidm.bz2] [--load-fraction 0.3] [--power-factor 0.95] [--relax-overloads] [--seed 0]
 
 Default input: newest snapshot in data_rte/connected (else raw). Default output:
 data_rte/base/<name>-base.xiidm.bz2.
@@ -26,7 +26,9 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pypowsybl as pp
+import lf_violations
 from grid_paths import BASE_DIR, CONNECTED_DIR, RAW_DIR, extension_of, newest_snapshot
 
 
@@ -40,10 +42,16 @@ def main():
     ap.add_argument("--weight-sigma", type=float, default=0.5, help="lognormal sigma of per-load weights (0 = uniform)")
     ap.add_argument("--vm-setpoint", type=float, default=1.0, help="p.u. voltage target of regulating generators")
     ap.add_argument("--q-limit-ratio", type=float, default=0.4, help="Qmax=-Qmin=ratio*Pmax for gens without reactive limits (0 = skip)")
+    ap.add_argument("--vlimits", type=float, nargs=2, metavar=("LO", "HI"), default=(0.9, 1.1),
+                    help="p.u. voltage bounds written to every voltage level (0 0 = keep the file's own limits)")
+    ap.add_argument("--controls", action="store_true",
+                    help="let transformer taps / shunt sections regulate voltage before saving (slow; did not converge reliably on D-GITT)")
+    ap.add_argument("--relax-overloads", action="store_true",
+                    help="raise the permanent current limit of elements still overloaded after the load flow to 110%% of their loading")
     ap.add_argument("--seed", type=int, default=0)
     a = ap.parse_args()
 
-    src = a.input or newest_snapshot(CONNECTED_DIR, RAW_DIR)
+    src = a.input or newest_snapshot(CONNECTED_DIR) or newest_snapshot(RAW_DIR)
     if src is None:
         raise SystemExit("no input given and no snapshot in data_rte/{connected,raw}")
     rng = np.random.default_rng(a.seed)
@@ -121,6 +129,34 @@ def main():
         z = np.zeros(len(dl))
         net.update_dangling_lines(id=dl.index, p0=z, q0=z)
 
+    # ---- voltage bounds (datakit takes VMIN/VMAX from the voltage levels)
+    if tuple(a.vlimits) != (0.0, 0.0):
+        vl = net.get_voltage_levels(attributes=["nominal_v"])
+        net.update_voltage_levels(
+            id=vl.index,
+            low_voltage_limit=vl.nominal_v * a.vlimits[0],
+            high_voltage_limit=vl.nominal_v * a.vlimits[1],
+        )
+        print(f"voltage bounds set to [{a.vlimits[0]}, {a.vlimits[1]}] p.u. on {len(vl)} voltage levels")
+
+    # ---- solve once with tap/shunt control and keep the solved tap positions / shunt sections
+    if a.controls:
+        res = pp.loadflow.run_ac(net, lf_violations.lf_parameters(controls=True))[0]
+        print(f"load flow with transformer/shunt voltage control: {res.status.name} ({res.iteration_count} iterations)")
+
+    if a.relax_overloads:
+        _, v = lf_violations.run(net, verbose=False)
+        over = v.get("overloaded", {})
+        if over:
+            lim = net.get_operational_limits()
+            ix = lim.index
+            keep = (ix.get_level_values("type") == "CURRENT") & (ix.get_level_values("acceptable_duration") == -1)
+            keep &= ix.get_level_values("element_id").isin(list(over))
+            sel = lim[keep]
+            factor = np.array([over[e] * 1.1 for e in sel.index.get_level_values("element_id")])
+            net.update_operational_limits(pd.DataFrame({"value": sel.value.to_numpy() * factor}, index=sel.index))
+            print(f"permanent current limit raised for {len(over)} overloaded elements")
+
     try:
         net.validate()
     except Exception as e:  # noqa: BLE001
@@ -136,6 +172,8 @@ def main():
         with open(tmp, "rb") as fi, bz2.open(out, "wb") as fo:
             shutil.copyfileobj(fi, fo)
     print("wrote", out)
+    print("\n[load flow on the written case]")
+    lf_violations.run(net)
 
 
 if __name__ == "__main__":

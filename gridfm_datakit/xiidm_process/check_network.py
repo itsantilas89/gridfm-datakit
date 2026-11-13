@@ -15,6 +15,7 @@ import numpy as np
 import pypowsybl as pp
 import scipy.io
 import scipy.sparse as sp
+import lf_violations
 from grid_paths import BASE_DIR, CONNECTED_DIR, RAW_DIR, REPORTS_DIR, extension_of, newest_snapshot
 from scipy.sparse.csgraph import connected_components
 
@@ -103,12 +104,11 @@ def main(path):
     gin = [g for g in np.where(st)[0] if idx[int(gen0[g, 0])] in set(mem)]
     print(f"  main island: load={bus0[mem,2].sum():.0f} MW  PMAX={pmax[gin].sum():.0f} MW  PG={gen0[gin,1].sum():.0f} MW")
 
-    # 6. PowSyBl AC load flow on the unmodified file
-    print("\n[PowSyBl AC loadflow on original network]")
+    # 6. PowSyBl AC load flow + operating-limit violations
+    print("
+[AC load flow and limit violations]")
     try:
-        res = pp.loadflow.run_ac(net, pp.loadflow.Parameters(distributed_slack=True))
-        for r in res:
-            print(f"  component {r.connected_component_num}: {r.status.name}, iters={r.iteration_count}, unabsorbed_mw={r.distributed_active_power:.2f} MW")
+        lf_violations.run(net)
     except Exception as e:  # noqa: BLE001
         print("  loadflow raised:", e)
 
