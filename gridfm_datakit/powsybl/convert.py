@@ -296,6 +296,12 @@ def from_powsybl(
     finally:
         Path(mat_path).unlink()
 
+    # pypowsybl leaves undefined fields (e.g. Pd/Qd of load-free buses, Pg of
+    # generators with no target) as NaN; these would be written as "nan" in
+    # the MATPOWER file and break PowerModels.jl, so treat them as zero.
+    for _m in (bus_matrix, gen_matrix, branch_matrix):
+        np.nan_to_num(_m, copy=False, nan=0.0)
+
     for i in range(bus_matrix.shape[0]):
         if bus_matrix[i, VMAX] <= 0:
             bus_matrix[i, VMAX] = 1.1

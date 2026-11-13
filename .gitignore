@@ -23,3 +23,8 @@ pfdelta/data/
 site/
 .coverage
 .coverage.*
+
+# xiidm_process: downloaded/derived grids, plots and check reports
+scripts/grids/data_rte/
+gridfm_datakit/xiidm_process/images/
+gridfm_datakit/xiidm_process/reports/

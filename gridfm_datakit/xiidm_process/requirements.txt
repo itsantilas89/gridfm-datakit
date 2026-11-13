@@ -1,0 +1,5 @@
+huggingface_hub
+pypowsybl
+networkx
+matplotlib
+igraph
