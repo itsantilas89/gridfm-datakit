@@ -36,12 +36,12 @@ import pypowsybl.network as pn
 from matplotlib.collections import LineCollection
 from matplotlib.lines import Line2D
 
-from grid_paths import CONNECTED_DIR, IMAGES_DIR, RAW_DIR, extension_of, newest_snapshot
+from grid_paths import CONNECTED_DIR, IMAGES_DIR, RAW_DIR, newest_snapshot, stem_of
 
 
 def default_image_path(snapshot: Path) -> Path:
     """images/<snapshot name>.png; a plot of a raw snapshot gets '-raw' so it can't clobber the connected one."""
-    stem = snapshot.name[: -len(extension_of(snapshot))]
+    stem = stem_of(snapshot)
     suffix = "-raw" if snapshot.parent.resolve() == RAW_DIR.resolve() else ""
     return IMAGES_DIR / f"{stem}{suffix}.png"
 

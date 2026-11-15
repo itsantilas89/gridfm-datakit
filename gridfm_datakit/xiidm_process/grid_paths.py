@@ -44,6 +44,16 @@ def extension_of(p: Path) -> str:
     return next((e for e in EXTENSIONS if p.name.endswith(e)), p.suffix)
 
 
+def stem_of(p: Path) -> str:
+    """File name without the .xiidm[.bz2] extension."""
+    return p.name[: -len(extension_of(p))]
+
+
+def sibling(p: Path, tail: str) -> Path:
+    """Path next to `p` with the same stem and a different tail, e.g. sibling(a.xiidm.bz2, '.report.json')."""
+    return p.with_name(stem_of(p) + tail)
+
+
 def list_snapshots(folder: Path) -> list[Path]:
     """Snapshot files directly inside `folder`, sorted by name (= by date)."""
     if not folder.is_dir():

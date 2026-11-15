@@ -9,12 +9,10 @@ import pandas as pd
 import pypowsybl as pp
 
 
-def lf_parameters(controls=False):
-    """Load-flow parameters; controls=True also lets transformer taps / shunt sections regulate voltage."""
+def lf_parameters():
+    """Load-flow parameters (distributed slack, no transformer / shunt voltage control)."""
     return pp.loadflow.Parameters(
         distributed_slack=True,
-        transformer_voltage_control_on=controls,
-        shunt_compensator_voltage_control_on=controls,
         provider_parameters={"maxOuterLoopIterations": "100", "maxNewtonRaphsonIterations": "30"},
     )
 

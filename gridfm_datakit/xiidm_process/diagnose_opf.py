@@ -1,7 +1,10 @@
 """Find which constraint class makes the AC OPF infeasible on a base-case snapshot.
 
-Runs the same PowerModels OPF datakit uses on the unmodified case, then on copies with
-one constraint class relaxed at a time, and prints Ipopt's termination status for each.
+Troubleshooting tool for when relax_to_opf_feasible.py reports that the case is infeasible even
+without thermal limits. Runs the same PowerModels OPF datakit uses on the unmodified case, then
+on copies with one constraint class relaxed at a time (thermal, voltage, shunts, Q limits,
+reactive load, load level), and prints Ipopt's termination status for each. For the binding
+branches it lists, relax_to_opf_feasible.py is the fix.
 Heavy (one OPF per variant, ~minutes on a large grid): run it on the server, not a laptop.
 
 Usage (from this folder):
@@ -52,21 +55,12 @@ def variants(net):
         n.Pd = n.Pd * 0.2
         n.Qd = n.Qd * 0.2
 
-    def scale_rates(k):
-        def f(n):
-            n.branches[:, RATE_A] = n.branches[:, RATE_A] * k  # 0 (unlimited) stays 0
-
-        return f
-
     def all_relaxed(n):
         no_thermal(n), wide_v(n), no_shunts(n), wide_q(n)
 
     return {
         "baseline": net,
         "no_thermal_limits": mod(no_thermal),
-        "thermal_limits_x1.5": mod(scale_rates(1.5)),
-        "thermal_limits_x2": mod(scale_rates(2.0)),
-        "thermal_limits_x3": mod(scale_rates(3.0)),
         "wide_voltage_0.7-1.3": mod(wide_v),
         "no_shunts": mod(no_shunts),
         "wide_gen_q_limits": mod(wide_q),

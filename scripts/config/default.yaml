@@ -9,7 +9,7 @@ network:
 load:
   generator: "agg_load_profile" # Name of the load generator; options: agg_load_profile, powergraph
   agg_profile: "default" # Name of the aggregated load profile
-  scenarios: 100 # Number of different load scenarios to generate
+  scenarios: 5 # Number of different load scenarios to generate
   # WARNING: the following parameters are only used if generator is "agg_load_profile"
   # if using generator "powergraph", these parameters are ignored
   sigma: 0.2 # max local noise

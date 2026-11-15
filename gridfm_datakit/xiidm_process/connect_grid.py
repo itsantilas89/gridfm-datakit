@@ -34,7 +34,7 @@ import networkx as nx
 import pandas as pd
 import pypowsybl.network as pn
 
-from grid_paths import CONNECTED_DIR, RAW_DIR, extension_of, list_snapshots
+from grid_paths import CONNECTED_DIR, RAW_DIR, list_snapshots, stem_of
 
 # getter name on the Network -> elements that can have disconnected terminals.
 # Terminal columns are discovered from the "connected*" columns of each table.
@@ -56,7 +56,7 @@ ELEMENT_GETTERS = [
 # ----------------------------------------------------------------------------- menu
 def connected_path(p: Path) -> Path:
     """data_rte/connected/<same name as the raw snapshot>.xiidm.bz2"""
-    return CONNECTED_DIR / (p.name[: -len(extension_of(p))] + ".xiidm.bz2")
+    return CONNECTED_DIR / f"{stem_of(p)}.xiidm.bz2"
 
 
 def choose_snapshot() -> Path:
@@ -275,7 +275,7 @@ def describe_islands(net, limit: int = 10) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("file", nargs="?", type=Path, help=".xiidm / .xiidm.bz2 (default: choose from menu)")
-    ap.add_argument("--out", type=Path, help="output path (default: <name>-connected.xiidm.bz2 next to the input)")
+    ap.add_argument("--out", type=Path, help="output path (default: data_rte/connected/<same name as the input>.xiidm.bz2)")
     ap.add_argument("--no-merge-buses", action="store_true",
                     help="skip step 3 (closing couplers to join islands to the main grid)")
     args = ap.parse_args()

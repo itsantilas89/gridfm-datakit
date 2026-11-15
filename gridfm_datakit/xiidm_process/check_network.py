@@ -1,4 +1,9 @@
-"""Diagnostic checks for a PowSyBl network file (read-only, no scenario generation).
+"""Read-only checks of a PowSyBl network file: is it ready for gridfm-datakit?
+
+Prints an inventory, the NaN fill and sanity of the MATPOWER export datakit reads, island
+structure, the AC load flow with its limit violations, and a final "[Datakit readiness]" verdict
+(one connected component, one REF bus that has a generator, no generator on a PQ bus, non-zero load).
+OPF feasibility is not checked here: that is relax_to_opf_feasible.py / diagnose_opf.py.
 
 Usage (from this folder):
     python check_network.py [file.xiidm[.bz2]]   # default: newest in data_rte/base, connected, raw
@@ -16,7 +21,7 @@ import pypowsybl as pp
 import scipy.io
 import scipy.sparse as sp
 import lf_violations
-from grid_paths import BASE_DIR, CONNECTED_DIR, RAW_DIR, REPORTS_DIR, extension_of, newest_snapshot
+from grid_paths import BASE_DIR, CONNECTED_DIR, RAW_DIR, REPORTS_DIR, newest_snapshot, stem_of
 from scipy.sparse.csgraph import connected_components
 
 BUS = ["BUS_I", "TYPE", "PD", "QD", "GS", "BS", "AREA", "VM", "VA", "BASEKV", "ZONE", "VMAX", "VMIN"]
@@ -104,6 +109,24 @@ def main(path):
     gin = [g for g in np.where(st)[0] if idx[int(gen0[g, 0])] in set(mem)]
     print(f"  main island: load={bus0[mem,2].sum():.0f} MW  PMAX={pmax[gin].sum():.0f} MW  PG={gen0[gin,1].sum():.0f} MW")
 
+    # 5b. what datakit's OPF + PF need (each failure here was a separate "generation fails" cause on D-GITT)
+    gbus = np.array([idx[int(x)] for x in gen0[st, 0]], dtype=int)
+    ref_gens = int((bus0[gbus, 1] == 3).sum())
+    on_pq = int((bus0[gbus, 1] == 1).sum())
+    problems = []
+    if nc != 1:
+        problems.append(f"{nc} connected components (need 1: run make_base_case.py, it keeps the main one)")
+    if len(ref) != 1:
+        problems.append(f"{len(ref)} REF buses (need 1)")
+    elif ref_gens == 0:
+        problems.append("the REF bus has no in-service generator (PF has nothing to balance on: make_base_case.py moves the slack terminal)")
+    if on_pq:
+        problems.append(f"{on_pq} in-service generators on PQ buses (PF asserts: make_base_case.py switches regulation on)")
+    if bus0[:, 2].sum() <= 0:
+        problems.append("total load is 0 MW (datakit scales existing loads: run make_base_case.py)")
+    print("\n[Datakit readiness]")
+    print("  READY (OPF feasibility not checked)" if not problems else "  NOT READY:\n" + "\n".join(f"   - {p}" for p in problems))
+
     # 6. PowSyBl AC load flow + operating-limit violations
     print("\n[AC load flow and limit violations]")
     try:
@@ -118,13 +141,10 @@ if __name__ == "__main__":
         raise SystemExit("no snapshot given and none found in data_rte/{base,connected,raw}")
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
-        try:
-            main(str(src))
-        finally:
-            pass
+        main(str(src))
     text = buf.getvalue()
     print(text)
     REPORTS_DIR.mkdir(exist_ok=True)
-    out = REPORTS_DIR / (src.name[: -len(extension_of(src))] + ".txt")
+    out = REPORTS_DIR / f"{stem_of(src)}.txt"
     out.write_text(text, encoding="utf-8")
     print("report saved to", out)

@@ -1,5 +1,9 @@
+# On top of gridfm-datakit itself (numpy, pandas, scipy, pypowsybl, julia/PowerModels), which
+# relax_to_opf_feasible.py and diagnose_opf.py import.
 huggingface_hub
 pypowsybl
 networkx
+
+# only for plot_grid.py (optional)
 matplotlib
 igraph

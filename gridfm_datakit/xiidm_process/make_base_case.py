@@ -1,19 +1,27 @@
 """Give an injection-free PowSyBl snapshot (e.g. D-GITT RTE7000) a synthetic nominal state.
 
-gridfm-datakit scales the *existing* per-bus loads (p_i * profile * noise), so the
-network needs non-zero nominal loads, plus generator setpoints. This script writes:
+gridfm-datakit scales the *existing* per-bus loads (p_i * profile * noise), so the network
+needs non-zero nominal loads and generator setpoints; the raw D-GITT files have neither.
+This script keeps only the main connected component (optionally only voltage levels
+>= --min-kv) and writes:
 
   * load p0/q0: total load = --load-fraction * sum(max_p of connected generators),
     split over connected loads (uniform, or noisy with --weight-sigma), q from --power-factor
   * generator target_p: proportional to max_p, clipped to [min_p, max_p], total = load * (1 + losses)
-  * generator target_v (kV): nominal voltage of the voltage level * --vm-setpoint (regulating units)
-  * target_q = 0 for non-regulating units; dangling-line p0/q0 = 0
-  * (optional) symmetric reactive limits for generators that have none
+  * voltage regulation on every dispatched generator, target_v = nominal kV * --vm-setpoint
+    (datakit's PF needs each in-service generator on a PV bus; D-GITT marks most as non-regulating)
+  * slack terminal on the largest dispatched generator (the files' own one sits on a busbar
+    without generator, which leaves the PF with nothing to balance on)
+  * symmetric reactive limits (+/- --q-limit-ratio * Pmax) for generators that have none
+  * voltage limits --vlimits on every voltage level; dangling-line and battery injections = 0
 
-It is a synthetic operating point, NOT real RTE data.
+It is a synthetic operating point, NOT real RTE data. A <out>.report.json next to the output
+records the arguments and what was changed. The result is usually still not OPF-feasible:
+run relax_to_opf_feasible.py on it next.
 
 Usage:
-    python make_base_case.py [IN.xiidm[.bz2]] [OUT.xiidm.bz2] [--load-fraction 0.3] [--power-factor 0.95] [--relax-overloads] [--seed 0]
+    python make_base_case.py [IN.xiidm[.bz2]] [OUT.xiidm.bz2] [--min-kv 200] [--load-fraction 0.5]
+                             [--power-factor 0.98] [--seed 0]
 
 Default input: newest snapshot in data_rte/connected (else raw). Default output:
 data_rte/base/<name>-base.xiidm.bz2.
@@ -21,15 +29,17 @@ data_rte/base/<name>-base.xiidm.bz2.
 
 import argparse
 import bz2
+import json
 import shutil
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pypowsybl as pp
 import lf_violations
-from grid_paths import BASE_DIR, CONNECTED_DIR, RAW_DIR, extension_of, newest_snapshot
+from grid_paths import BASE_DIR, CONNECTED_DIR, RAW_DIR, newest_snapshot, sibling, stem_of
 
 
 def remove_voltage_levels(net, vl_ids):
@@ -75,12 +85,6 @@ def main():
     ap.add_argument("--q-limit-ratio", type=float, default=0.4, help="Qmax=-Qmin=ratio*Pmax for gens without reactive limits (0 = skip)")
     ap.add_argument("--vlimits", type=float, nargs=2, metavar=("LO", "HI"), default=(0.9, 1.1),
                     help="p.u. voltage bounds written to every voltage level (0 0 = keep the file's own limits)")
-    ap.add_argument("--controls", action="store_true",
-                    help="let transformer taps / shunt sections regulate voltage before saving (slow; did not converge reliably on D-GITT)")
-    ap.add_argument("--limit-scale", type=float, default=1.0,
-                    help="multiply every permanent current limit by this factor (2.0 made the OPF feasible on the 225/380 kV D-GITT grid)")
-    ap.add_argument("--relax-overloads", action="store_true",
-                    help="raise the permanent current limit of elements still overloaded after the load flow to 110%% of their loading")
     ap.add_argument("--min-kv", type=float, default=0.0,
                     help="keep only voltage levels with nominal_v >= this (kV), e.g. 200 for the 225/380 kV grid")
     ap.add_argument("--seed", type=int, default=0)
@@ -91,13 +95,26 @@ def main():
         raise SystemExit("no input given and no snapshot in data_rte/{connected,raw}")
     rng = np.random.default_rng(a.seed)
     net = pp.network.load(str(src))
+    report = {
+        "tool": "make_base_case.py",
+        "created": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "input": str(src),
+        "synthetic": "operating point and limits are NOT real RTE data",
+        "args": {k: (str(v) if isinstance(v, Path) else v) for k, v in vars(a).items()},
+    }
 
+    n_before = {"voltage_levels": len(net.get_voltage_levels()), "buses": len(net.get_buses()),
+                "loads": len(net.get_loads()), "generators": len(net.get_generators())}
     if a.min_kv > 0:
         vls = net.get_voltage_levels(attributes=["nominal_v"])
         remove_voltage_levels(net, vls.index[vls.nominal_v < a.min_kv])
-        dropped = keep_main_component(net)
-        print(f"kept voltage levels >= {a.min_kv} kV: {len(net.get_voltage_levels())} levels, {len(net.get_buses())} buses "
-              f"({dropped} disconnected levels dropped), {len(net.get_loads())} loads, {len(net.get_generators())} generators")
+    dropped = keep_main_component(net)  # datakit needs a single connected component
+    report["pruning"] = {
+        "min_kv": a.min_kv, "before": n_before, "disconnected_levels_dropped": dropped,
+        "after": {"voltage_levels": len(net.get_voltage_levels()), "buses": len(net.get_buses()),
+                  "loads": len(net.get_loads()), "generators": len(net.get_generators())},
+    }
+    print(f"kept {report['pruning']['after']} (from {n_before}; {dropped} disconnected levels dropped)")
 
     gens = net.get_generators(attributes=["max_p", "min_p", "voltage_regulator_on", "voltage_level_id", "connected"])
     gens = gens[gens.connected & (gens.max_p > 0)]
@@ -134,6 +151,28 @@ def main():
     z = np.zeros(len(all_gens))
     net.update_generators(id=all_gens.index, target_p=z, target_q=z)
     net.update_generators(id=gens.index, target_p=pg, target_q=np.zeros(len(gens)))
+    # PowerModels' PF asserts that every in-service generator sits on a PV/slack bus, and the
+    # MATPOWER export types buses from voltage regulation; D-GITT marks most units as non-regulating.
+    off = gens.index[~reg]
+    net.update_generators(id=off, voltage_regulator_on=np.ones(len(off), dtype=bool), target_v=nom[~reg] * a.vm_setpoint)
+    report["regulation"] = {"generators_switched_on": int(len(off)), "vm_setpoint": a.vm_setpoint}
+    print(f"voltage regulation switched on for {len(off)} dispatched generators")
+
+    # ---- slack bus: put it on the largest dispatched generator.
+    # The D-GITT files carry a slackTerminal on a busbar section with no generator, and the MATPOWER
+    # export turns it into the REF bus; PowerModels' PF then has nothing to balance on (bus_gens[REF]).
+    old_slack = net.get_extensions("slackTerminal")
+    if len(old_slack):
+        net.remove_extensions("slackTerminal", list(old_slack.index))
+    top = gens.index[int(np.argmax(pg))]
+    top_vl = gens.voltage_level_id[top]
+    net.create_extensions("slackTerminal", pd.DataFrame({"element_id": [top]}, index=pd.Index([top_vl], name="voltage_level_id")))
+    report["slack"] = {
+        "generator": top, "voltage_level": top_vl, "pg_mw": float(pg.max()),
+        "replaced": old_slack.reset_index().to_dict("records"),
+    }
+    print(f"slack terminal moved to generator {top} ({pg.max():.0f} MW, {top_vl}); replaced {len(old_slack)} existing terminal(s)")
+
     # voltage targets for every regulating generator (also disconnected / Pmax=0 ones,
     # otherwise PowSyBl validation rejects a regulator that is on without a setpoint)
     allg = net.get_generators(attributes=["voltage_regulator_on", "voltage_level_id"])
@@ -181,43 +220,14 @@ def main():
         )
         print(f"voltage bounds set to [{a.vlimits[0]}, {a.vlimits[1]}] p.u. on {len(vl)} voltage levels")
 
-    # ---- solve once with tap/shunt control and keep the solved tap positions / shunt sections
-    if a.controls:
-        res = pp.loadflow.run_ac(net, lf_violations.lf_parameters(controls=True))[0]
-        print(f"load flow with transformer/shunt voltage control: {res.status.name} ({res.iteration_count} iterations)")
-
-    # ---- scale all permanent current limits (the OPF is thermally infeasible with the real ratings
-    # and a synthetic load placement; see diagnose_opf.py)
-    if a.limit_scale != 1.0:
-        lim = net.get_operational_limits()
-        ix = lim.index
-        keep = (ix.get_level_values("type") == "CURRENT") & (ix.get_level_values("acceptable_duration") == -1)
-        keep &= (lim.value < 1e300).to_numpy()
-        sel = lim[keep]
-        net.update_operational_limits(pd.DataFrame({"value": sel.value.to_numpy() * a.limit_scale}, index=sel.index))
-        print(f"permanent current limits x{a.limit_scale} on {len(sel)} limits")
-
-    if a.relax_overloads:
-        _, v = lf_violations.run(net, verbose=False)
-        over = v.get("overloaded", {})
-        if over:
-            lim = net.get_operational_limits()
-            ix = lim.index
-            keep = (ix.get_level_values("type") == "CURRENT") & (ix.get_level_values("acceptable_duration") == -1)
-            keep &= ix.get_level_values("element_id").isin(list(over))
-            sel = lim[keep]
-            factor = np.array([over[e] * 1.1 for e in sel.index.get_level_values("element_id")])
-            net.update_operational_limits(pd.DataFrame({"value": sel.value.to_numpy() * factor}, index=sel.index))
-            print(f"permanent current limit raised for {len(over)} overloaded elements")
-
     try:
         net.validate()
     except Exception as e:  # noqa: BLE001
         print("validate() note:", e)
     print("validation level:", net.get_validation_level())
-    print(f"load total {p0.sum():.0f} MW, dispatch {pg.sum():.0f} MW, Pmax {hi.sum():.0f} MW, regulating gens {int(reg.sum())}")
+    print(f"load total {p0.sum():.0f} MW, dispatch {pg.sum():.0f} MW, Pmax {hi.sum():.0f} MW, dispatched generators {len(gens)}")
 
-    out = Path(a.output) if a.output else BASE_DIR / (src.name[: -len(extension_of(src))] + "-base.xiidm.bz2")
+    out = Path(a.output) if a.output else BASE_DIR / f"{stem_of(src)}-base.xiidm.bz2"
     out.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d) / "net.xiidm"
@@ -225,6 +235,10 @@ def main():
         with open(tmp, "rb") as fi, bz2.open(out, "wb") as fo:
             shutil.copyfileobj(fi, fo)
     print("wrote", out)
+    report["totals_mw"] = {"load": float(p0.sum()), "dispatch": float(pg.sum()), "pmax": float(hi.sum())}
+    report_path = sibling(out, ".report.json")
+    report_path.write_text(json.dumps(report, indent=2))
+    print("wrote", report_path)
     print("\n[load flow on the written case]")
     lf_violations.run(net)
 
