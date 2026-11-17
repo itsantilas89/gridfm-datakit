@@ -1,0 +1,64 @@
+network:
+  name: "2023-12-31-2355-225kv-reg-opf" # Name of the power grid network (without extension)
+  reader: "powsybl"
+  source: "file" # Data source for the grid; options: pglib, file
+  # WARNING: the following parameter is only used if source is "file"
+  network_dir: "scripts/grids/data_rte/base"
+  file: "scripts/grids/data_rte/base/2023-12-31-2355-225kv-reg-opf.xiidm.bz2" # used by the powsybl reader
+
+load:
+  generator: "agg_load_profile" # Name of the load generator; options: agg_load_profile, powergraph
+  agg_profile: "default" # Name of the aggregated load profile
+  scenarios: 10000 # Number of different load scenarios to generate
+  # WARNING: the following parameters are only used if generator is "agg_load_profile"
+  # if using generator "powergraph", these parameters are ignored
+  sigma: 0.2 # max local noise
+  change_reactive_power: true # If true, changes reactive power of loads. If False, keeps the ones from the case file
+  global_range: 0.4 # Range of the global scaling factor. used to set the lower bound of the scaling factor
+  max_scaling_factor: 4.0 # Max upper bound of the global scaling factor
+  step_size: 0.1 # Step size when finding the upper bound of the global scaling factor
+  start_scaling_factor: 1.0 # Initial value of the global scaling factor
+
+topology_perturbation:
+  type: "none" # Type of topology generator; options: n_minus_k, random, none
+  # WARNING: the following parameters are only used if type is not "none"
+  k: 1 # Maximum number of components to drop in each perturbation
+  n_topology_variants: 20 # Number of unique perturbed topologies per scenario
+  elements: [branch, gen] # elements to perturb. options: branch, gen
+  # Optional for type: "random": if provided, entry i is the probability of sampling i outages.
+  # If provided, the generator samples over 0..k; otherwise it samples uniformly between 1 and k.
+  # Use decimal probabilities in YAML, not fraction expressions.
+  # Example for k: 1 -> 10% N-0 and 90% N-1.
+  # outage_count_probabilities: [0.1, 0.9]
+
+generation_perturbation:
+  type: "none" # Type of generation perturbation; options: cost_permutation, cost_perturbation, none
+  # WARNING: the following parameter is only used if type is "cost_permutation"
+  sigma: 1.0 # Size of range used for sampling scaling factor
+
+admittance_perturbation:
+  type: "none" # Type of admittance perturbation; options: random_perturbation, none
+  # WARNING: the following parameter is only used if type is "random_perturbation"
+  sigma: 0.2 # Size of range used for sampling scaling factor
+
+settings:
+  num_processes: 16 # Number of parallel processes to use
+  process_backend: "process_pool_executor" # Options: process_pool_executor, multiprocessing_pool
+  enable_checkpointing: false # Save completed chunks; overwrite: false resumes a matching run
+  data_dir: "./data_out/" # Directory to save generated data relative to the project root
+  large_chunk_size: 1000 # Number of load scenarios processed before saving
+  overwrite: true # If true, overwrites existing files, if false, appends to files
+  mode: "pf" # Mode of the script; options: pf, opf. pf: power flow data where one or more operating limits – the inequality constraints defined in OPF, e.g., voltage magnitude or branch limits – may be violated. opf:  generates datapoints for training OPF solvers, with cost-optimal dispatches that satisfy all operating limits (OPF-feasible)
+  include_dc_res: true # If true, also stores the results of dc power flow or dc optimal power flow
+  enable_solver_logs: true # If true, write OPF/PF/DCPF logs (incl. fast paths) to {data_dir}/solver_log.
+  pf_fast: true # Whether to use fast PF solver by default (compute_ac_pf from powermodels.jl); if false, uses Ipopt-based PF. Some networks (typically large ones e.g. case10000_goc) do not work with pf_fast: true. pf_fast is faster and more accurate than the Ipopt-based PF.
+  dcpf_fast: true # Whether to use fast DCPF solver by default (compute_dc_pf from PowerModels.jl)
+  pf_solver: "powermodel" # Engine solving the power flow in pf mode; options: powermodel, powsybl, lightsim2grid. The OPF is always solved by PowerModels. powsybl requires network.reader: powsybl.
+  opf_formulation: "polar" # Use "rectangular" for the faster ACR formulation. AC OPF is nonconvex, so validate that its potentially different local solution is acceptable before switching.
+  max_iter: 200 # Max iterations for Ipopt-based solvers
+  coinhsl:
+    enabled: false # Enable an installed CoinHSL library for Ipopt solves
+    linear_solver: "ma57" # Options: ma27, ma57, ma77, ma86, ma97
+    hsllib: "" # Path to the CoinHSL shared library; required when enabled
+  seed: null # Seed for random number generation. If null, a random seed is generated (RECOMMENDED). To get the same data across runs, set the seed and note that ALL OTHER PARAMETERS IN THE CONFIG FILE MUST BE THE SAME.
+
