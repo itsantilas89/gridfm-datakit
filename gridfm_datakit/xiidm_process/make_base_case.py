@@ -2,12 +2,13 @@
 
 gridfm-datakit scales the *existing* per-bus loads (p_i * profile * noise), so the network
 needs non-zero nominal loads and generator setpoints; the raw D-GITT files have neither.
-This script keeps only the main connected component (optionally only voltage levels
+This script keeps only the main connected component (the default; optionally only voltage levels
 >= --min-kv) and writes:
 
   * load p0/q0: total load = --load-fraction * sum(max_p of connected generators),
     split over connected loads (uniform, or noisy with --weight-sigma), q from --power-factor
   * generator target_p: proportional to max_p, clipped to [min_p, max_p], total = load * (1 + losses)
+  * connected generators with Pmax = 0 are disconnected (they cannot produce, and would sit on a PQ bus)
   * voltage regulation on every dispatched generator, target_v = nominal kV * --vm-setpoint
     (datakit's PF needs each in-service generator on a PV bus; D-GITT marks most as non-regulating)
   * slack terminal on the largest dispatched generator (the files' own one sits on a busbar
@@ -20,7 +21,7 @@ records the arguments and what was changed. The result is usually still not OPF-
 run relax_to_opf_feasible.py on it next.
 
 Usage:
-    python make_base_case.py [IN.xiidm[.bz2]] [OUT.xiidm.bz2] [--min-kv 200] [--load-fraction 0.5]
+    python make_base_case.py [IN.xiidm[.bz2]] [OUT.xiidm.bz2] [--min-kv 0] [--load-fraction 0.2]
                              [--power-factor 0.98] [--seed 0]
 
 Default input: newest snapshot in data_rte/connected (else raw). Default output:
@@ -77,7 +78,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("input", nargs="?", type=Path)
     ap.add_argument("output", nargs="?")
-    ap.add_argument("--load-fraction", type=float, default=0.3, help="total load / connected Pmax")
+    ap.add_argument("--load-fraction", type=float, default=0.2, help="total load / connected Pmax (0.2 works on the whole grid; the 225/380 kV subgrid also takes 0.5)")
     ap.add_argument("--losses", type=float, default=0.02, help="dispatch = load * (1 + losses)")
     ap.add_argument("--power-factor", type=float, default=0.95)
     ap.add_argument("--weight-sigma", type=float, default=0.5, help="lognormal sigma of per-load weights (0 = uniform)")
@@ -117,6 +118,12 @@ def main():
     print(f"kept {report['pruning']['after']} (from {n_before}; {dropped} disconnected levels dropped)")
 
     gens = net.get_generators(attributes=["max_p", "min_p", "voltage_regulator_on", "voltage_level_id", "connected"])
+    # a connected unit with Pmax = 0 produces nothing but would sit on a PQ bus, which datakit's PF rejects
+    idle = gens.index[gens.connected & (gens.max_p <= 0)]
+    if len(idle):
+        net.update_generators(id=idle, connected=[False] * len(idle))
+    report["idle_generators_disconnected"] = list(idle)
+    print(f"{len(idle)} connected generators with Pmax = 0 disconnected")
     gens = gens[gens.connected & (gens.max_p > 0)]
     loads = net.get_loads(attributes=["connected"])
     loads = loads[loads.connected]
