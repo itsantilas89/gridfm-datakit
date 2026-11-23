@@ -458,9 +458,28 @@ def init_julia(
         # base parse covers them (verified in tests/test_pm_data_path.py).
         # A zero-pd load component is materialized for every bus so any load
         # scenario can be applied without re-parsing.
+        # PowerModels.parse_file runs correct_branch_directions!, which swaps
+        # f_bus/t_bus of a branch whose opposite-direction twin (same two buses)
+        # was visited earlier, and reports that branch's flows at the swapped
+        # ends. _GFM_REVERSED holds the branch row numbers it swapped so that
+        # _gfm_pack can return every flow at the from/to bus of the case file.
         jl.seval("""
+        global _GFM_REVERSED = Set{Int}()
+
+        function _gfm_reversed_branches(case_file, data)
+            raw = PowerModels.parse_file(case_file; validate=false)
+            rev = Set{Int}()
+            for (k, br) in data["branch"]
+                if br["f_bus"] != raw["branch"][k]["f_bus"]
+                    push!(rev, parse(Int, k))
+                end
+            end
+            return rev
+        end
+
         function _gfm_init_base(case_file)
             data = PowerModels.parse_file(case_file)
+            global _GFM_REVERSED = _gfm_reversed_branches(case_file, data)
             bus_load = Dict{Int,String}()
             for (k, l) in data["load"]
                 bus_load[l["load_bus"]] = k
@@ -532,10 +551,19 @@ def init_julia(
                 sb = sol["branch"]
                 for (r, i) in enumerate(branch_ids)
                     br = sb[string(Int(i))]
-                    B[r, 1] = br["pf"]
-                    B[r, 2] = get(br, "qf", NaN)
-                    B[r, 3] = br["pt"]
-                    B[r, 4] = get(br, "qt", NaN)
+                    if Int(i) in _GFM_REVERSED
+                        # PowerModels reversed this branch: its "from" end is
+                        # the case file's "to" end
+                        B[r, 1] = br["pt"]
+                        B[r, 2] = get(br, "qt", NaN)
+                        B[r, 3] = br["pf"]
+                        B[r, 4] = get(br, "qf", NaN)
+                    else
+                        B[r, 1] = br["pf"]
+                        B[r, 2] = get(br, "qf", NaN)
+                        B[r, 3] = br["pt"]
+                        B[r, 4] = get(br, "qt", NaN)
+                    end
                 end
             end
             G = fill(NaN, length(gen_ids), 2)
