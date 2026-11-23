@@ -51,8 +51,8 @@ Two findings explain the shape of the table:
 |---|---|---|
 | total load | 0.2 x connected Pmax = 29 531 MW, spread over 7002 loads with log-normal weights (sigma 0.5, seed 0) | the raw loads are all 0 MW |
 | load power factor | 0.98 | reactive load for the above |
-| dispatch | proportional to Pmax, clipped to [Pmin, Pmax], total = load x 1.02 = 30 122 MW (losses 2 %) | raw generators have no setpoint |
-| voltage regulation | switched on for 5426 generators that were non-regulating, setpoint 1.0 pu of the nominal voltage | datakit's PF needs every in-service generator on a PV bus; only a minority were regulating in D-GITT |
+| dispatch | proportional to Pmax, clipped to [Pmin, Pmax], total = load x 1.02 = 30 122 MW (losses 2 %) | **not required by datakit**: its OPF solves Pg itself (in `mode: pf` the OPF result overwrites it) and the load is sized from the Pmax sum, not from the dispatch. Kept only as a balanced, plausible starting point for load-flow checks. Checked on this grid: with every `target_p` = 0 the OPF relaxation gives byte-identical limit changes and 20-scenario `pf` and `opf` runs give identical output. `make_base_case.py --no-dispatch` skips it |
+| voltage regulation | switched on for 5426 generators that were non-regulating, setpoint 1.0 pu of the nominal voltage; applies to every connected generator with Pmax > 0, whatever its dispatch | datakit's PF needs every in-service generator on a PV bus (the MATPOWER export types a bus PV only if the generator regulates); only a minority were regulating in D-GITT. This is the flag `voltage_regulator_on`, not the in-service state |
 | slack | moved to generator `SSAVO6E.HU6` (368 MW, voltage level `E.HUCP6`) | the file's slack sat on a busbar without generator |
 | generator Q limits | capability curves collapsed to min/max; units without usable limits get +/-0.4 x Pmax (4977 generators) | the OPF needs real reactive ranges |
 | bus voltage limits | 0.9 - 1.1 pu on all 5960 voltage levels | the raw limits are inconsistent |

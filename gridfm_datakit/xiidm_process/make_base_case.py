@@ -1,17 +1,23 @@
 """Give an injection-free PowSyBl snapshot (e.g. D-GITT RTE7000) a synthetic nominal state.
 
 gridfm-datakit scales the *existing* per-bus loads (p_i * profile * noise), so the network
-needs non-zero nominal loads and generator setpoints; the raw D-GITT files have neither.
+needs non-zero nominal loads; the raw D-GITT files have all loads at 0 MW. Generator setpoints are NOT
+needed: datakit's OPF solves Pg itself (and in `mode: pf` overwrites it with the OPF result), the load is
+sized from sum(Pmax), not from the dispatch, and an OPF-limit relaxation and datakit runs on the same grid
+with all target_p = 0 gave identical results. The dispatch below is only a balanced, plausible starting
+point (for load-flow checks); `--no-dispatch` skips it.
 This script keeps only the main connected component (the default; optionally only voltage levels
 >= --min-kv) and writes:
 
   * load p0/q0: total load = --load-fraction * sum(max_p of connected generators),
     split over connected loads (uniform, or noisy with --weight-sigma), q from --power-factor
-  * generator target_p: proportional to max_p, clipped to [min_p, max_p], total = load * (1 + losses)
+  * generator target_p (optional, not needed by datakit): proportional to max_p, clipped to
+    [min_p, max_p], total = load * (1 + losses); all 0 with --no-dispatch
   * connected generators with Pmax = 0 are disconnected (they cannot produce, and would sit on a PQ bus)
-  * voltage regulation on every dispatched generator, target_v = nominal kV * --vm-setpoint
+  * voltage regulation on every connected generator with Pmax > 0 (they all get a dispatch, so this is the
+    same set), target_v = nominal kV * --vm-setpoint
     (datakit's PF needs each in-service generator on a PV bus; D-GITT marks most as non-regulating)
-  * slack terminal on the largest dispatched generator (the files' own one sits on a busbar
+  * slack terminal on the largest dispatched generator, or largest Pmax with --no-dispatch (the files' own one sits on a busbar
     without generator, which leaves the PF with nothing to balance on)
   * symmetric reactive limits (+/- --q-limit-ratio * Pmax) for generators that have none
   * voltage limits --vlimits on every voltage level; dangling-line and battery injections = 0
@@ -80,6 +86,9 @@ def main():
     ap.add_argument("output", nargs="?")
     ap.add_argument("--load-fraction", type=float, default=0.2, help="total load / connected Pmax (0.2 works on the whole grid; the 225/380 kV subgrid also takes 0.5)")
     ap.add_argument("--losses", type=float, default=0.02, help="dispatch = load * (1 + losses)")
+    ap.add_argument("--no-dispatch", action="store_true",
+                    help="leave every generator at target_p = 0 (datakit does not need a dispatch; "
+                         "regulation and slack are then chosen from Pmax)")
     ap.add_argument("--power-factor", type=float, default=0.95)
     ap.add_argument("--weight-sigma", type=float, default=0.5, help="lognormal sigma of per-load weights (0 = uniform)")
     ap.add_argument("--vm-setpoint", type=float, default=1.0, help="p.u. voltage target of regulating generators")
@@ -143,14 +152,17 @@ def main():
     # ---- generators: proportional dispatch, iterate clipping to [min_p, max_p]
     target = total_load * (1 + a.losses)
     lo, hi = gens.min_p.clip(lower=0).to_numpy(), gens.max_p.to_numpy()
-    scale = target / hi.sum()
-    for _ in range(50):
-        pg = np.clip(hi * scale, lo, hi)
-        gap = target - pg.sum()
-        free = (pg > lo) & (pg < hi)
-        if abs(gap) < 1e-6 * target or not free.any():
-            break
-        scale *= 1 + gap / pg[free].sum()
+    if a.no_dispatch:
+        pg = np.zeros(len(gens))  # datakit's OPF solves Pg itself; see the module docstring
+    else:
+        scale = target / hi.sum()
+        for _ in range(50):
+            pg = np.clip(hi * scale, lo, hi)
+            gap = target - pg.sum()
+            free = (pg > lo) & (pg < hi)
+            if abs(gap) < 1e-6 * target or not free.any():
+                break
+            scale *= 1 + gap / pg[free].sum()
     vls = net.get_voltage_levels(attributes=["nominal_v"])
     nom = vls.nominal_v.reindex(gens.voltage_level_id).to_numpy()
     reg = gens.voltage_regulator_on.to_numpy()
@@ -163,15 +175,15 @@ def main():
     off = gens.index[~reg]
     net.update_generators(id=off, voltage_regulator_on=np.ones(len(off), dtype=bool), target_v=nom[~reg] * a.vm_setpoint)
     report["regulation"] = {"generators_switched_on": int(len(off)), "vm_setpoint": a.vm_setpoint}
-    print(f"voltage regulation switched on for {len(off)} dispatched generators")
+    print(f"voltage regulation switched on for {len(off)} of {len(gens)} generators with Pmax > 0")
 
-    # ---- slack bus: put it on the largest dispatched generator.
+    # ---- slack bus: put it on the largest dispatched generator (largest Pmax with --no-dispatch).
     # The D-GITT files carry a slackTerminal on a busbar section with no generator, and the MATPOWER
     # export turns it into the REF bus; PowerModels' PF then has nothing to balance on (bus_gens[REF]).
     old_slack = net.get_extensions("slackTerminal")
     if len(old_slack):
         net.remove_extensions("slackTerminal", list(old_slack.index))
-    top = gens.index[int(np.argmax(pg))]
+    top = gens.index[int(np.argmax(hi if a.no_dispatch else pg))]
     top_vl = gens.voltage_level_id[top]
     net.create_extensions("slackTerminal", pd.DataFrame({"element_id": [top]}, index=pd.Index([top_vl], name="voltage_level_id")))
     report["slack"] = {

@@ -1,8 +1,9 @@
 """Make a base-case snapshot AC-OPF-feasible by widening only the limits that bind.
 
 gridfm-datakit runs an OPF for every scenario, also in `mode: pf` (the OPF gives the
-generator setpoints), so the base case must be OPF-feasible. With the synthetic load/dispatch of
-make_base_case.py it is not, because some limits are too tight for the operating point. Instead of
+generator setpoints), so the base case must be OPF-feasible. With the synthetic load of
+make_base_case.py it is not, because some limits are too tight for the load level (the OPF ignores
+the base-case dispatch, so the result is the same with or without it). Instead of
 scaling every limit, this script
 
   1. solves the OPF on the input (stop if it is already feasible),
