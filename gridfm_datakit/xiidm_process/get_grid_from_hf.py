@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Download one .xiidm.bz2 snapshot from OpenSynth/D-GITT-RTE7000-2023, verify its MD5,
-and store it as data_rte/raw/YYYY-MM-DD-HHMM.xiidm.bz2.
+and store it as private_data/opensynth_rte7k/raw/YYYY-MM-DD-HHMM.xiidm.bz2.
 
 Usage:
   python get_grid_from_hf.py                          # first snapshot of 2023-01-01

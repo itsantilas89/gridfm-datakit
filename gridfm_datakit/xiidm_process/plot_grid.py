@@ -12,8 +12,8 @@ connectivity). RTE files carry no coordinates, so the layout is force-directed
 and shows topology, not geography.
 
 Usage:
-  python plot_grid.py                          # newest snapshot in data_rte/connected (else raw) -> images/<name>.png
-  python plot_grid.py data_rte/raw/2023-12-31-2355.xiidm.bz2
+  python plot_grid.py                          # newest snapshot in private_data/opensynth_rte7k/connected (else raw) -> images/<name>.png
+  python plot_grid.py private_data/opensynth_rte7k/raw/2023-12-31-2355.xiidm.bz2
   python plot_grid.py --min-kv 225             # only lines >= 225 kV (clearer for big grids)
   python plot_grid.py --all-components         # draw every component, not just the largest
   python plot_grid.py --out grid.pdf --dpi 300
@@ -173,7 +173,7 @@ def draw(G, pos, out: Path, dpi: int, title: str) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("file", nargs="?", type=Path, help=".xiidm or .xiidm.bz2 (default: newest in data_rte/connected, else raw)")
+    ap.add_argument("file", nargs="?", type=Path, help=".xiidm or .xiidm.bz2 (default: newest in private_data/opensynth_rte7k/connected, else raw)")
     ap.add_argument("--out", type=Path, help="output image, png/pdf/svg (default: images/<snapshot name>.png)")
     ap.add_argument("--min-kv", type=float, default=0, help="only draw lines with nominal voltage >= this (kV)")
     ap.add_argument("--all-components", action="store_true", help="draw all connected components, not just the largest")

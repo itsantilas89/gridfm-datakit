@@ -5,7 +5,7 @@
 (datakit's tables hold 6626 bus rows per scenario because the MATPOWER export adds 44 buses).
 It is **not real RTE data**: the operating point and some limits were invented or widened, listed below.
 
-Files (git-ignored data, `scripts/grids/data_rte/base/`):
+Files (git-ignored data, `scripts/grids/private_data/opensynth_rte7k/base/`):
 
 | File | What it is |
 |---|---|

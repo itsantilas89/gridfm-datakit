@@ -1,11 +1,11 @@
 """Shared folder layout and file-naming convention for the grid snapshots.
 
-  <repo>/scripts/grids/data_rte/raw/        snapshots exactly as downloaded           YYYY-MM-DD-HHMM.xiidm.bz2
-  <repo>/scripts/grids/data_rte/connected/  the same snapshots after connect_grid.py  YYYY-MM-DD-HHMM.xiidm.bz2
-  <repo>/scripts/grids/data_rte/base/       snapshots after make_base_case.py         YYYY-MM-DD-HHMM-base.xiidm.bz2
+  <repo>/scripts/grids/private_data/opensynth_rte7k/raw/        snapshots exactly as downloaded           YYYY-MM-DD-HHMM.xiidm.bz2
+  <repo>/scripts/grids/private_data/opensynth_rte7k/connected/  the same snapshots after connect_grid.py  YYYY-MM-DD-HHMM.xiidm.bz2
+  <repo>/scripts/grids/private_data/opensynth_rte7k/base/       snapshots after make_base_case.py         YYYY-MM-DD-HHMM-base.xiidm.bz2
 
 Generated output stays out of git: images/ (plot_grid.py) and reports/ (check_network.py)
-next to this file, and scripts/grids/data_rte/ (all three gitignored).
+next to this file, and scripts/grids/private_data/opensynth_rte7k/ (all three gitignored).
 
 A connected snapshot has the same file name as the raw one it came from. Non-default
 variants of the dataset ("brut" instead of "enrichi") get a "-brut" suffix so they never
@@ -16,7 +16,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[1]
-DATA_DIR = REPO_ROOT / "scripts" / "grids" / "data_rte"
+DATA_DIR = REPO_ROOT / "scripts" / "grids" / "private_data" / "opensynth_rte7k"
 RAW_DIR = DATA_DIR / "raw"
 CONNECTED_DIR = DATA_DIR / "connected"
 BASE_DIR = DATA_DIR / "base"

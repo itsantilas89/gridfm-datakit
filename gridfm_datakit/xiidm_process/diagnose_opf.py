@@ -8,7 +8,7 @@ branches it lists, relax_to_opf_feasible.py is the fix.
 Heavy (one OPF per variant, ~minutes on a large grid): run it on the server, not a laptop.
 
 Usage (from this folder):
-    python diagnose_opf.py [snapshot.xiidm[.bz2]]        # default: newest in data_rte/base
+    python diagnose_opf.py [snapshot.xiidm[.bz2]]        # default: newest in private_data/opensynth_rte7k/base
     python diagnose_opf.py FILE --max-iter 300 --only baseline,no_shunts
 """
 import argparse
@@ -102,7 +102,7 @@ def main():
     a = ap.parse_args()
     src = a.file or newest_snapshot(BASE_DIR)
     if src is None:
-        raise SystemExit("no snapshot given and none found in data_rte/base")
+        raise SystemExit("no snapshot given and none found in private_data/opensynth_rte7k/base")
 
     net = load_net(str(src)).gfm_net
     jl = init_julia(max_iter=a.max_iter, solver_log_dir=None, coinhsl=None)

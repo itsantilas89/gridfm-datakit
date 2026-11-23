@@ -17,9 +17,9 @@ Run them from the repo root as `python gridfm_datakit/xiidm_process/<script>.py`
 
 | Script | What it does |
 |---|---|
-| `get_grid_from_hf.py` | Downloads one snapshot, verifies its MD5, stores it in `scripts/grids/data_rte/raw/`. |
-| `connect_grid.py` | Closes switches so no element is left disconnected (and joins split busbars) -> `data_rte/connected/`. |
-| `make_base_case.py` | Keeps the main component (optionally only `--min-kv`), sets loads (and, optionally, a dispatch: `--no-dispatch` skips it, datakit does not need it), voltage regulation on all generators with Pmax > 0, slack on the largest one, disconnects Pmax = 0 units, reactive and voltage limits -> `data_rte/base/`. |
+| `get_grid_from_hf.py` | Downloads one snapshot, verifies its MD5, stores it in `scripts/grids/private_data/opensynth_rte7k/raw/`. |
+| `connect_grid.py` | Closes switches so no element is left disconnected (and joins split busbars) -> `private_data/opensynth_rte7k/connected/`. |
+| `make_base_case.py` | Keeps the main component (optionally only `--min-kv`), sets loads (and, optionally, a dispatch: `--no-dispatch` skips it, datakit does not need it), voltage regulation on all generators with Pmax > 0, slack on the largest one, disconnects Pmax = 0 units, reactive and voltage limits -> `private_data/opensynth_rte7k/base/`. |
 | `relax_to_opf_feasible.py` | Makes the case OPF-feasible by widening only the limits that bind: thermal ratings first, and if that is not enough also bus voltage bounds and generator Q limits. Checks every written limit and re-solves the saved file -> `<name>-opf.xiidm.bz2`. |
 | `check_network.py` | Read-only check of a file, ending in a "Datakit readiness" verdict (one component, one REF bus with generator, no generator on a PQ bus, non-zero load). |
 | `diagnose_opf.py` | Troubleshooting: relaxes one OPF constraint class at a time to see which one causes infeasibility. Only needed if `relax_to_opf_feasible.py` says the case is infeasible even with everything relaxed. |
@@ -30,7 +30,7 @@ Run them from the repo root as `python gridfm_datakit/xiidm_process/<script>.py`
 
 ```bash
 pip install -r gridfm_datakit/xiidm_process/requirements.txt
-X=gridfm_datakit/xiidm_process; G=scripts/grids/data_rte
+X=gridfm_datakit/xiidm_process; G=scripts/grids/private_data/opensynth_rte7k
 
 python $X/get_grid_from_hf.py --date 2023-12-31 --time 2355
 python $X/connect_grid.py $G/raw/2023-12-31-2355.xiidm.bz2
@@ -47,8 +47,8 @@ network:
   name: "2023-12-31-2355-full-opf"
   reader: "powsybl"
   source: "file"
-  network_dir: "scripts/grids/data_rte/base"
-  file: "scripts/grids/data_rte/base/2023-12-31-2355-full-opf.xiidm.bz2"
+  network_dir: "scripts/grids/private_data/opensynth_rte7k/base"
+  file: "scripts/grids/private_data/opensynth_rte7k/base/2023-12-31-2355-full-opf.xiidm.bz2"
 ```
 
 ```bash

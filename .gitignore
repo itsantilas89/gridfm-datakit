@@ -24,7 +24,12 @@ site/
 .coverage
 .coverage.*
 
-# xiidm_process: downloaded/derived grids, plots and check reports
-scripts/grids/data_rte/
+# private grids (downloaded or derived, e.g. opensynth_rte7k, sadales_tkls)
+scripts/grids/private_data/
+
+# xiidm_process: plots and check reports
 gridfm_datakit/xiidm_process/images/
 gridfm_datakit/xiidm_process/reports/
+
+# written next to a case file by correct_network() whenever it is loaded (also by the tests)
+*_corrected.m

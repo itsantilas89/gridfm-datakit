@@ -6,7 +6,7 @@ structure, the AC load flow with its limit violations, and a final "[Datakit rea
 OPF feasibility is not checked here: that is relax_to_opf_feasible.py / diagnose_opf.py.
 
 Usage (from this folder):
-    python check_network.py [file.xiidm[.bz2]]   # default: newest in data_rte/base, connected, raw
+    python check_network.py [file.xiidm[.bz2]]   # default: newest in private_data/opensynth_rte7k/base, connected, raw
 The printed report is also saved to reports/<snapshot name>.txt (gitignored).
 """
 
@@ -138,7 +138,7 @@ def main(path):
 if __name__ == "__main__":
     src = Path(sys.argv[1]) if len(sys.argv) > 1 else newest_snapshot(BASE_DIR, CONNECTED_DIR, RAW_DIR)
     if src is None:
-        raise SystemExit("no snapshot given and none found in data_rte/{base,connected,raw}")
+        raise SystemExit("no snapshot given and none found in private_data/opensynth_rte7k/{base,connected,raw}")
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
         main(str(src))

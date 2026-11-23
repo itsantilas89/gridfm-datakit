@@ -30,8 +30,8 @@ Usage:
     python make_base_case.py [IN.xiidm[.bz2]] [OUT.xiidm.bz2] [--min-kv 0] [--load-fraction 0.2]
                              [--power-factor 0.98] [--seed 0]
 
-Default input: newest snapshot in data_rte/connected (else raw). Default output:
-data_rte/base/<name>-base.xiidm.bz2.
+Default input: newest snapshot in private_data/opensynth_rte7k/connected (else raw). Default output:
+private_data/opensynth_rte7k/base/<name>-base.xiidm.bz2.
 """
 
 import argparse
@@ -102,7 +102,7 @@ def main():
 
     src = a.input or newest_snapshot(CONNECTED_DIR) or newest_snapshot(RAW_DIR)
     if src is None:
-        raise SystemExit("no input given and no snapshot in data_rte/{connected,raw}")
+        raise SystemExit("no input given and no snapshot in private_data/opensynth_rte7k/{connected,raw}")
     rng = np.random.default_rng(a.seed)
     net = pp.network.load(str(src))
     report = {

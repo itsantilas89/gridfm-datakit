@@ -3,8 +3,8 @@ network:
   reader: "powsybl"
   source: "file" # Data source for the grid; options: pglib, file
   # WARNING: the following parameter is only used if source is "file"
-  network_dir: "scripts/grids/data_rte/base"
-  file: "scripts/grids/data_rte/base/2023-12-31-2355-225kv-reg-opf.xiidm.bz2" # used by the powsybl reader
+  network_dir: "scripts/grids/private_data/opensynth_rte7k/base"
+  file: "scripts/grids/private_data/opensynth_rte7k/base/2023-12-31-2355-225kv-reg-opf.xiidm.bz2" # used by the powsybl reader
 
 load:
   generator: "agg_load_profile" # Name of the load generator; options: agg_load_profile, powergraph

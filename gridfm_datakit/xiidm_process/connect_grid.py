@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Reconnect every disconnected element of a grid snapshot and save the result.
 
-Pick a snapshot from data_rte/raw in a small terminal menu (or pass a path), and the
+Pick a snapshot from private_data/opensynth_rte7k/raw in a small terminal menu (or pass a path), and the
 script closes switches so that no line, transformer, generator, load, ... is left
-disconnected, then writes it to data_rte/connected under the same name
+disconnected, then writes it to private_data/opensynth_rte7k/connected under the same name
 (YYYY-MM-DD-HHMM.xiidm.bz2).
 
 How it works (node-breaker topology, as in the RTE snapshots):
@@ -22,7 +22,7 @@ the main grid stay separate; they are listed at the end.
 
 Usage:
   python connect_grid.py                      # choose a raw snapshot from a menu
-  python connect_grid.py data_rte/raw/2023-12-31-2355.xiidm.bz2
+  python connect_grid.py private_data/opensynth_rte7k/raw/2023-12-31-2355.xiidm.bz2
   python connect_grid.py --out fixed.xiidm.bz2   # custom output path
 """
 import argparse
@@ -55,7 +55,7 @@ ELEMENT_GETTERS = [
 
 # ----------------------------------------------------------------------------- menu
 def connected_path(p: Path) -> Path:
-    """data_rte/connected/<same name as the raw snapshot>.xiidm.bz2"""
+    """private_data/opensynth_rte7k/connected/<same name as the raw snapshot>.xiidm.bz2"""
     return CONNECTED_DIR / f"{stem_of(p)}.xiidm.bz2"
 
 
@@ -275,7 +275,7 @@ def describe_islands(net, limit: int = 10) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("file", nargs="?", type=Path, help=".xiidm / .xiidm.bz2 (default: choose from menu)")
-    ap.add_argument("--out", type=Path, help="output path (default: data_rte/connected/<same name as the input>.xiidm.bz2)")
+    ap.add_argument("--out", type=Path, help="output path (default: private_data/opensynth_rte7k/connected/<same name as the input>.xiidm.bz2)")
     ap.add_argument("--no-merge-buses", action="store_true",
                     help="skip step 3 (closing couplers to join islands to the main grid)")
     args = ap.parse_args()
